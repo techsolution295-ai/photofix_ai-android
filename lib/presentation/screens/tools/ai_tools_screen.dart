@@ -2,7 +2,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import '../../../core/constants/route_names.dart';
+import '../../navigation/open_tool.dart';
+import '../../providers/settings_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../widgets/pro_chip.dart';
 
 /// Tools tab — matches product design (sections + Free badge + hero).
 class AiToolsScreen extends StatelessWidget {
@@ -124,7 +130,8 @@ class AiToolsScreen extends StatelessWidget {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            const SliverToBoxAdapter(child: _Header()),
+            const SliverToBoxAdapter(child: _ToolsHeader()),
+            const SliverToBoxAdapter(child: BannerAdWidget()),
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -147,25 +154,34 @@ class AiToolsScreen extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header();
+class _ToolsHeader extends StatelessWidget {
+  const _ToolsHeader();
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
+    final isPro = context.watch<SettingsProvider>().isPremium;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: SizedBox(
         height: 44,
-        child: Center(
-          child: Text(
-            'AI Tools',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1D2E),
-              letterSpacing: -0.3,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Text(
+              'AI Tools',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1A1D2E),
+                letterSpacing: -0.3,
+              ),
             ),
-          ),
+            if (!isPro)
+              const Align(
+                alignment: Alignment.centerRight,
+                child: ProChip(),
+              ),
+          ],
         ),
       ),
     );
@@ -184,7 +200,7 @@ class _HeroBanner extends StatelessWidget {
         final bodySize = (w * 0.031).clamp(10.8, 12.0);
 
         return Container(
-          height: 146,
+          height: 112,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
             gradient: const LinearGradient(
@@ -246,12 +262,14 @@ class _HeroBanner extends StatelessWidget {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 15, 4, 15),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
                   child: Row(
                     children: [
                       Expanded(
                         flex: 12,
-                        child: Column(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
@@ -266,7 +284,7 @@ class _HeroBanner extends StatelessWidget {
                                 letterSpacing: -0.35,
                               ),
                             ),
-                            const SizedBox(height: 7),
+                            const SizedBox(height: 4),
                             Expanded(
                               child: Text(
                                 'Use advanced AI tools to edit, improve and transform your photos like magic.',
@@ -282,12 +300,15 @@ class _HeroBanner extends StatelessWidget {
                             ),
                           ],
                         ),
+                        ),
                       ),
                       Expanded(
                         flex: 9,
-                        child: CustomPaint(
-                          painter: _MagicArtPainter(),
-                          child: const SizedBox.expand(),
+                        child: Image.asset(
+                          'assets/images/tools_hero_wand.png',
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.medium,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                         ),
                       ),
                     ],
@@ -315,232 +336,6 @@ class _GlowBlob extends StatelessWidget {
       decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
-}
-
-class _MagicArtPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width * 0.52;
-    final cy = size.height * 0.52;
-
-    _drawGlassPane(
-      canvas,
-      center: Offset(cx + 10, cy + 6),
-      side: size.width * 0.52,
-      color: const Color(0xFF2EC4B6),
-      alpha: 0.55,
-      tilt: -0.18,
-    );
-    _drawGlassPane(
-      canvas,
-      center: Offset(cx + 2, cy + 1),
-      side: size.width * 0.52,
-      color: const Color(0xFF4C6FFF),
-      alpha: 0.62,
-      tilt: -0.12,
-    );
-    _drawGlassPane(
-      canvas,
-      center: Offset(cx - 6, cy - 4),
-      side: size.width * 0.52,
-      color: const Color(0xFFB8A6FF),
-      alpha: 0.78,
-      tilt: -0.06,
-    );
-
-    _drawWand(canvas, size);
-
-    _drawSpark(
-        canvas, Offset(cx - 18, cy - 28), size.width * 0.07, const Color(0xFFFFD84D));
-    _drawSpark(
-        canvas, Offset(cx + 8, cy - 34), size.width * 0.055, const Color(0xFFFFE27A));
-    _drawSpark(
-        canvas, Offset(cx + 22, cy - 12), size.width * 0.045, const Color(0xFFFFD84D));
-    _drawSpark(
-        canvas, Offset(cx - 2, cy + 10), size.width * 0.035, const Color(0xFFFFE9A0));
-  }
-
-  void _drawGlassPane(
-    Canvas canvas, {
-    required Offset center,
-    required double side,
-    required Color color,
-    required double alpha,
-    required double tilt,
-  }) {
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(tilt);
-
-    final rect =
-        Rect.fromCenter(center: Offset.zero, width: side, height: side);
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(side * 0.18));
-
-    canvas.drawRRect(
-      rrect.shift(const Offset(3, 5)),
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.18)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            color.withValues(alpha: alpha),
-            color.withValues(alpha: alpha * 0.65),
-          ],
-        ).createShader(rect),
-    );
-
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..color = Colors.white.withValues(alpha: 0.45),
-    );
-
-    final shineRect =
-        Rect.fromLTWH(-side * 0.42, -side * 0.42, side * 0.84, side * 0.28);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(shineRect, Radius.circular(side * 0.12)),
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withValues(alpha: 0.35),
-            Colors.white.withValues(alpha: 0.0),
-          ],
-        ).createShader(shineRect),
-    );
-
-    canvas.restore();
-  }
-
-  void _drawWand(Canvas canvas, Size size) {
-    final start = Offset(size.width * 0.18, size.height * 0.78);
-    final end = Offset(size.width * 0.78, size.height * 0.18);
-    final dir = end - start;
-    final len = dir.distance;
-    final unit = dir / len;
-    final normal = Offset(-unit.dy, unit.dx);
-
-    final shadowPath = Path()
-      ..moveTo((start + normal * 3).dx, (start + normal * 3).dy + 4)
-      ..lineTo((end + normal * 2).dx, (end + normal * 2).dy + 4)
-      ..lineTo((end - normal * 2).dx, (end - normal * 2).dy + 4)
-      ..lineTo((start - normal * 3).dx, (start - normal * 3).dy + 4)
-      ..close();
-    canvas.drawPath(
-      shadowPath,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.22)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-
-    final handleEnd = start + unit * (len * 0.28);
-    _drawSegment(
-      canvas,
-      start,
-      handleEnd,
-      widthStart: 7,
-      widthEnd: 5.5,
-      colors: const [Color(0xFFE8ECF4), Color(0xFF9AA3B5), Color(0xFFF2F5FA)],
-    );
-
-    final tipEnd = start + unit * (len * 0.82);
-    _drawSegment(
-      canvas,
-      handleEnd,
-      tipEnd,
-      widthStart: 5.2,
-      widthEnd: 4.2,
-      colors: const [Color(0xFF8B6CFF), Color(0xFF5B3DF5), Color(0xFF9B82FF)],
-    );
-
-    _drawSegment(
-      canvas,
-      tipEnd,
-      end,
-      widthStart: 4.2,
-      widthEnd: 3.2,
-      colors: const [Color(0xFFFFFFFF), Color(0xFFE8E8F0), Color(0xFFFFFFFF)],
-    );
-
-    canvas.drawCircle(
-      end,
-      7,
-      Paint()
-        ..color = const Color(0xFFFFE27A).withValues(alpha: 0.55)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-    canvas.drawCircle(end, 3.2, Paint()..color = Colors.white);
-  }
-
-  void _drawSegment(
-    Canvas canvas,
-    Offset a,
-    Offset b, {
-    required double widthStart,
-    required double widthEnd,
-    required List<Color> colors,
-  }) {
-    final dir = b - a;
-    final len = dir.distance;
-    if (len == 0) return;
-    final unit = dir / len;
-    final n = Offset(-unit.dy, unit.dx);
-
-    final path = Path()
-      ..moveTo((a + n * widthStart / 2).dx, (a + n * widthStart / 2).dy)
-      ..lineTo((b + n * widthEnd / 2).dx, (b + n * widthEnd / 2).dy)
-      ..lineTo((b - n * widthEnd / 2).dx, (b - n * widthEnd / 2).dy)
-      ..lineTo((a - n * widthStart / 2).dx, (a - n * widthStart / 2).dy)
-      ..close();
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: colors,
-        ).createShader(Rect.fromPoints(a - n * 8, b + n * 8)),
-    );
-  }
-
-  void _drawSpark(Canvas canvas, Offset c, double r, Color color) {
-    final path = Path();
-    for (var i = 0; i < 4; i++) {
-      final a1 = (i * 90 - 90) * math.pi / 180;
-      final a2 = (i * 90 - 45) * math.pi / 180;
-      final p1 = Offset(c.dx + r * math.cos(a1), c.dy + r * math.sin(a1));
-      final p2 = Offset(
-          c.dx + r * 0.32 * math.cos(a2), c.dy + r * 0.32 * math.sin(a2));
-      if (i == 0) {
-        path.moveTo(p1.dx, p1.dy);
-      } else {
-        path.lineTo(p1.dx, p1.dy);
-      }
-      path.lineTo(p2.dx, p2.dy);
-    }
-    path.close();
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-    );
-    canvas.drawPath(path, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _StarPainter extends CustomPainter {
@@ -628,7 +423,7 @@ class _ToolCard extends StatelessWidget {
       color: Colors.white,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
-        onTap: () => Navigator.of(context).pushNamed(tool.route),
+        onTap: () => openTool(context, tool.route),
         borderRadius: BorderRadius.circular(6),
         child: Ink(
           decoration: BoxDecoration(

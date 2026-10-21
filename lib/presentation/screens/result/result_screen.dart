@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/ad_service.dart';
 import '../../../core/constants/route_names.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../core/services/image_storage_service.dart';
@@ -69,7 +70,11 @@ class ResultScreen extends StatelessWidget {
               PrimaryButton(
                 label: AppStrings.saveToGallery,
                 icon: Icons.download,
-                onPressed: () => _save(context),
+                onPressed: () {
+                  AdService.instance.showSelectInterstitialThen(
+                    () => _save(context),
+                  );
+                },
               ),
               const SizedBox(height: 8),
               SecondaryButton(
@@ -82,13 +87,14 @@ class ResultScreen extends StatelessWidget {
                   Expanded(
                     child: TextButton(
                       onPressed: () {
-                        Navigator.of(context).pushNamedAndRemoveUntil(
-                          RouteNames.main,
-                          (r) => false,
-                        );
-                        Navigator.of(context).pushNamed(
-                          RouteNames.enhance,
-                        );
+                        final nav = Navigator.of(context);
+                        AdService.instance.showSelectInterstitialThen(() async {
+                          nav.pushNamedAndRemoveUntil(
+                            RouteNames.main,
+                            (r) => false,
+                          );
+                          nav.pushNamed(RouteNames.enhance);
+                        });
                       },
                       child: const Text(AppStrings.enhanceAnother),
                     ),

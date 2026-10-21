@@ -58,24 +58,20 @@ class AppConfig {
 
   static const String supportEmail = String.fromEnvironment(
     'SUPPORT_EMAIL',
-    defaultValue: 'supportmateen@gmail.com',
+    defaultValue: 'appbounties@gmail.com',
   );
 
   static String get supportEmailUri => 'mailto:$supportEmail';
 
   // --- Google Play product IDs ---
-  static const String productMonthly = String.fromEnvironment(
-    'PRODUCT_MONTHLY',
-    defaultValue: 'photofix_pro_monthly',
-  );
-  static const String productYearly = String.fromEnvironment(
-    'PRODUCT_YEARLY',
-    defaultValue: 'photofix_pro_yearly',
-  );
-  static const String productLifetime = String.fromEnvironment(
-    'PRODUCT_LIFETIME',
-    defaultValue: 'photofix_lifetime',
-  );
+  static const String productWeekly = 'weekly_premium';
+  static const String productMonthly = 'app_premium';
+  static const String productYearly = 'yearly_premium';
+
+  /// Base plan IDs created in Play Console. Used to pick the priced offer.
+  static const String basePlanWeekly = 'weekly-base';
+  static const String basePlanMonthly = 'monthly-base';
+  static const String basePlanYearly = 'yearly-base';
 
   // --- AdMob (defaults = Google test IDs) ---
   static const String admobAppId = String.fromEnvironment(

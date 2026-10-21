@@ -5,6 +5,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/route_names.dart';
+import '../../navigation/open_tool.dart';
+import '../../providers/settings_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../widgets/pro_chip.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../core/services/photo_picker_service.dart';
 import '../../../domain/models/ai_models.dart';
@@ -27,7 +31,8 @@ class HomeScreen extends StatelessWidget {
         'source': camera ? 'camera' : 'gallery',
       });
       if (!context.mounted) return;
-      Navigator.of(context).pushNamed(
+      await openTool(
+        context,
         RouteNames.enhance,
         arguments: ToolScreenArgs(initialImagePath: file.path),
       );
@@ -60,9 +65,19 @@ class HomeScreen extends StatelessWidget {
                   sliver: SliverToBoxAdapter(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: const [
+                        _Header(),
+                      ],
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: BannerAdWidget()),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _Header(),
-                        const SizedBox(height: 12),
                         SizedBox(
                           height: 200,
                           child: _HeroCard(
@@ -85,7 +100,7 @@ class HomeScreen extends StatelessWidget {
                       crossAxisCount: 2,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
-                      childAspectRatio: 1.48,
+                      childAspectRatio: 1.18,
                     ),
                     delegate: SliverChildBuilderDelegate(
                       (context, i) => _ToolCard(
@@ -215,7 +230,8 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const Column(
+        const Expanded(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -257,6 +273,9 @@ class _Header extends StatelessWidget {
             ),
           ],
         ),
+        ),
+        const SizedBox(width: 8),
+        if (!context.watch<SettingsProvider>().isPremium) const ProChip(),
       ],
     );
   }
@@ -631,7 +650,14 @@ class _BeforeAfterState extends State<_BeforeAfter>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset('assets/images/hero_landscape.png', fit: BoxFit.cover),
+            Image.asset(
+              'assets/images/hero_landscape.png',
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, __, ___) => const ColoredBox(
+                color: Color(0xFF1A2744),
+              ),
+            ),
             ClipRect(
               clipper: const _HalfClipper(0.48),
               child: ColorFiltered(
@@ -644,6 +670,8 @@ class _BeforeAfterState extends State<_BeforeAfter>
                 child: Image.asset(
                   'assets/images/hero_landscape.png',
                   fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
             ),
@@ -882,7 +910,7 @@ class _ToolCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const iconSize = 34.0;
+    const iconSize = 48.0;
     const pad = 12.0;
 
     return TweenAnimationBuilder<double>(
@@ -899,7 +927,7 @@ class _ToolCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => Navigator.pushNamed(context, tool.route),
+          onTap: () => openTool(context, tool.route),
           borderRadius: BorderRadius.circular(6),
           child: Ink(
             decoration: BoxDecoration(
@@ -919,6 +947,7 @@ class _ToolCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Container(
@@ -938,7 +967,7 @@ class _ToolCard extends StatelessWidget {
                         child: Icon(
                           tool.icon,
                           color: tool.accent,
-                          size: 18,
+                          size: 28,
                         ),
                       ),
                       const Spacer(),
@@ -960,7 +989,7 @@ class _ToolCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const Spacer(),
                   Text(
                     tool.title,
                     maxLines: 1,
@@ -974,19 +1003,18 @@ class _ToolCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Expanded(
-                    child: Text(
-                      tool.desc,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        height: 1.25,
-                        color: Color(0xFF8B90A5),
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Text(
+                    tool.desc,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.25,
+                      color: Color(0xFF8B90A5),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                  const SizedBox(height: 2),
                 ],
               ),
             ),

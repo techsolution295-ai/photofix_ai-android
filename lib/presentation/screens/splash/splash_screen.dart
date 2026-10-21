@@ -1,12 +1,17 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/route_names.dart';
+import '../../../core/services/app_open_ad_service.dart';
+import '../../../core/services/pro_purchase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../providers/settings_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,9 +38,34 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _navigate() async {
+    final started = DateTime.now();
+    final refresh = context.read<ProPurchaseService>().refreshFromStore();
     await Future<void>.delayed(const Duration(milliseconds: _holdMs));
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(RouteNames.main);
+    try {
+      await refresh.timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    if (!mounted) return;
+    if (context.read<SettingsProvider>().isPremium) {
+      Navigator.of(context).pushReplacementNamed(RouteNames.main);
+      return;
+    }
+
+    final elapsed = DateTime.now().difference(started);
+    final budget = const Duration(seconds: 8) - elapsed;
+    final timeout = budget > const Duration(seconds: 4)
+        ? const Duration(seconds: 4)
+        : (budget > Duration.zero ? budget : const Duration(milliseconds: 800));
+    await AppOpenAdManager.instance.showAdIfAvailable(loadTimeout: timeout);
+    if (!mounted) return;
+    if (context.read<SettingsProvider>().isPremium) {
+      Navigator.of(context).pushReplacementNamed(RouteNames.main);
+      return;
+    }
+    Navigator.of(context).pushReplacementNamed(
+      RouteNames.premium,
+      arguments: true,
+    );
   }
 
   @override

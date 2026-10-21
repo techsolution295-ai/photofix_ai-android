@@ -1,7 +1,7 @@
 name: photofix_ai
 description: PhotoFix AI — Enhance, restore and upscale photos with AI.
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+6
 
 environment:
   sdk: ^3.5.0
@@ -30,6 +30,9 @@ dependencies:
   cached_network_image: ^3.4.1
   crop_your_image: ^2.0.0
   flutter_animate: ^4.5.2
+  google_mobile_ads: ^9.1.0
+  in_app_purchase: ^3.2.1
+  in_app_purchase_android: ^0.5.4
 
 dev_dependencies:
   flutter_test:
@@ -39,14 +42,18 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: false
   image_path: assets/icon/app_icon.png
   adaptive_icon_background: "#0B1220"
   adaptive_icon_foreground: assets/icon/app_icon.png
-  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon/
-    - assets/images/
+    - assets/icon/app_icon.png
+    - assets/images/hero_landscape.png
+    - assets/images/logo.png
+    - assets/images/pro_banner_art.png
+    - assets/images/pro_crown.png
+    - assets/images/splash_icon.png
+    - assets/images/tools_hero_banner.png
+    - assets/images/tools_hero_wand.png

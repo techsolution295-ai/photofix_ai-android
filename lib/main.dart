@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'core/config/app_config.dart';
+import 'core/services/ad_service.dart';
 import 'core/services/ai_service.dart';
 import 'core/services/ai_service_factory.dart';
 import 'core/services/analytics_service.dart';
@@ -13,6 +17,7 @@ import 'core/services/image_storage_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/openai_key_store.dart';
 import 'core/services/photo_picker_service.dart';
+import 'core/services/pro_purchase_service.dart';
 import 'presentation/providers/ai_config_provider.dart';
 import 'presentation/providers/ai_processing_provider.dart';
 import 'presentation/providers/history_provider.dart';
@@ -29,6 +34,15 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFFF7F8FC),
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
 
   final prefs = await SharedPreferences.getInstance();
   final network = NetworkService();
@@ -41,6 +55,16 @@ Future<void> main() async {
   final aiService = AiServiceFactory.create(openAiKeys);
 
   final settingsProvider = SettingsProvider(prefs);
+  final billing = ProPurchaseService(settingsProvider);
+  AdService.instance.bind(isPro: () => settingsProvider.isPremium);
+  try {
+    await MobileAds.instance
+        .initialize()
+        .timeout(const Duration(seconds: 8));
+  } catch (_) {}
+  AdService.instance.initialize();
+  unawaited(billing.start());
+
   final aiConfigProvider = AiConfigProvider(openAiKeys);
   final historyProvider = HistoryProvider(historyRepo);
   final processingProvider = AiProcessingProvider(
@@ -63,6 +87,7 @@ Future<void> main() async {
         ),
         Provider<NetworkService>.value(value: network),
         ChangeNotifierProvider.value(value: settingsProvider),
+        ChangeNotifierProvider.value(value: billing),
         ChangeNotifierProvider.value(value: aiConfigProvider),
         ChangeNotifierProvider.value(value: historyProvider),
         ChangeNotifierProvider.value(value: processingProvider),

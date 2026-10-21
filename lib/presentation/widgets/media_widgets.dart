@@ -33,7 +33,13 @@ class ProcessingOverlay extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(File(imagePath), fit: BoxFit.contain),
+          Image.file(
+            File(imagePath),
+            fit: BoxFit.contain,
+            cacheWidth: 1280,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -138,18 +144,34 @@ class _BeforeAfterSliderState extends State<BeforeAfterSlider> {
             transformationController: _controller,
             minScale: 1,
             maxScale: 4,
+            panEnabled: false,
             child: SizedBox(
               width: width,
               height: height,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.file(File(widget.afterPath), fit: BoxFit.contain),
+                  Image.file(
+                    File(widget.afterPath),
+                    fit: BoxFit.contain,
+                    cacheWidth: 1280,
+                    filterQuality: FilterQuality.medium,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, __, ___) => const ColoredBox(
+                      color: Color(0xFFE8EAF2),
+                    ),
+                  ),
                   ClipRect(
                     clipper: _BeforeClipper(_ratio),
                     child: Image.file(
                       File(widget.beforePath),
                       fit: BoxFit.contain,
+                      cacheWidth: 1280,
+                      filterQuality: FilterQuality.medium,
+                      gaplessPlayback: true,
+                      errorBuilder: (_, __, ___) => const ColoredBox(
+                        color: Color(0xFFDDE1EC),
+                      ),
                     ),
                   ),
                   Positioned(

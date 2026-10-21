@@ -13,10 +13,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/ai_models.dart';
 import '../../providers/ai_processing_provider.dart';
 import '../../providers/history_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../widgets/pro_chip.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/media_widgets.dart';
 
-/// Shared AI tool screen — fully free, no ads / Pro gates.
+/// Shared AI tool screen. Free users see a banner; Pro hides it.
 class ToolProcessScreen extends StatefulWidget {
   const ToolProcessScreen({
     super.key,
@@ -48,6 +51,7 @@ class ToolProcessScreen extends StatefulWidget {
 class _ToolProcessScreenState extends State<ToolProcessScreen> {
   String? _imagePath;
   ({int width, int height})? _dims;
+  bool _running = false;
 
   @override
   void initState() {
@@ -92,12 +96,14 @@ class _ToolProcessScreenState extends State<ToolProcessScreen> {
   }
 
   Future<void> _process() async {
+    if (_running) return;
     if (_imagePath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a photo first.')),
       );
       return;
     }
+    _running = true;
 
     final history = context.read<HistoryProvider>();
     final processing = context.read<AiProcessingProvider>();
@@ -105,28 +111,32 @@ class _ToolProcessScreenState extends State<ToolProcessScreen> {
     final params = widget.resolveParams?.call() ??
         (strength: null, upscaleFactor: null, options: <String, dynamic>{});
 
-    final ok = await processing.run(
-      image: File(_imagePath!),
-      op: widget.operation,
-      strength: params.strength,
-      upscaleFactor: params.upscaleFactor,
-      options: params.options,
-    );
+    try {
+      final ok = await processing.run(
+        image: File(_imagePath!),
+        op: widget.operation,
+        strength: params.strength,
+        upscaleFactor: params.upscaleFactor,
+        options: params.options,
+      );
 
-    if (!mounted) return;
-    if (!ok) return;
+      if (!mounted) return;
+      final args = processing.resultArgs;
+      if (!ok || args == null) return;
 
-    final args = processing.resultArgs!;
-    await history.add(
-      operation: args.operation,
-      originalPath: args.originalPath,
-      processedPath: args.processedPath,
-      isPro: true,
-    );
+      await history.add(
+        operation: args.operation,
+        originalPath: args.originalPath,
+        processedPath: args.processedPath,
+        isPro: true,
+      );
 
-    if (!mounted) return;
-    await Navigator.of(context).pushNamed(RouteNames.result, arguments: args);
-    processing.reset();
+      if (!mounted) return;
+      await Navigator.of(context).pushNamed(RouteNames.result, arguments: args);
+      processing.reset();
+    } finally {
+      _running = false;
+    }
   }
 
   String get _cleanActionLabel =>
@@ -150,6 +160,7 @@ class _ToolProcessScreenState extends State<ToolProcessScreen> {
               title: widget.title,
               subtitle: widget.description,
             ),
+            const BannerAdWidget(),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -252,6 +263,11 @@ class _ToolHeader extends StatelessWidget {
               ),
             ),
           ),
+          if (!context.watch<SettingsProvider>().isPremium)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: ProChip(),
+            ),
         ],
       ),
     );
@@ -437,7 +453,12 @@ class _PhotoPreview extends StatelessWidget {
             child: Image.file(
               File(path),
               fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
+              cacheWidth: 1280,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.broken_image_outlined),
+              ),
             ),
           ),
         ),

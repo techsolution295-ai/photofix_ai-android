@@ -598,6 +598,8 @@ class _BeforeAfterThumb extends StatelessWidget {
                     File(originalPath),
                     fit: BoxFit.cover,
                     height: double.infinity,
+                    cacheWidth: 240,
+                    filterQuality: FilterQuality.low,
                     errorBuilder: (_, __, ___) =>
                         Container(color: const Color(0xFFE8EAF2)),
                   ),
@@ -607,6 +609,8 @@ class _BeforeAfterThumb extends StatelessWidget {
                     File(processedPath),
                     fit: BoxFit.cover,
                     height: double.infinity,
+                    cacheWidth: 240,
+                    filterQuality: FilterQuality.low,
                     errorBuilder: (_, __, ___) =>
                         Container(color: const Color(0xFFDDE1EC)),
                   ),

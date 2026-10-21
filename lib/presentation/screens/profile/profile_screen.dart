@@ -82,10 +82,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             leading: const Icon(Icons.star_outline),
             title: const Text(AppStrings.rateApp),
             onTap: () async {
-              final uri = Uri.parse(
+              final market = Uri.parse(
+                'market://details?id=${AppConfig.packageName}',
+              );
+              final web = Uri.parse(
                 'https://play.google.com/store/apps/details?id=${AppConfig.packageName}',
               );
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
+              try {
+                if (await canLaunchUrl(market)) {
+                  final opened = await launchUrl(
+                    market,
+                    mode: LaunchMode.externalApplication,
+                  );
+                  if (opened) return;
+                }
+              } catch (_) {}
+              await launchUrl(web, mode: LaunchMode.externalApplication);
             },
           ),
           _section('Legal'),

@@ -14,16 +14,19 @@ class SettingsProvider extends ChangeNotifier {
   static const _notifKey = 'notifications_enabled';
   static const _onboardingKey = 'onboarding_done';
   static const _langKey = 'language';
+  static const _premiumKey = 'is_premium';
 
   ThemeModeOption _theme = ThemeModeOption.system;
   bool _notifications = true;
   bool _onboardingDone = false;
   String _language = 'en';
+  bool _isPremium = false;
 
   ThemeModeOption get themeOption => _theme;
   bool get notificationsEnabled => _notifications;
   bool get onboardingDone => _onboardingDone;
   String get language => _language;
+  bool get isPremium => _isPremium;
 
   ThemeMode get themeMode {
     switch (_theme) {
@@ -46,6 +49,14 @@ class SettingsProvider extends ChangeNotifier {
     _notifications = _prefs.getBool(_notifKey) ?? true;
     _onboardingDone = _prefs.getBool(_onboardingKey) ?? false;
     _language = _prefs.getString(_langKey) ?? 'en';
+    _isPremium = _prefs.getBool(_premiumKey) ?? false;
+  }
+
+  Future<void> setPremium(bool value) async {
+    if (_isPremium == value) return;
+    _isPremium = value;
+    await _prefs.setBool(_premiumKey, value);
+    notifyListeners();
   }
 
   Future<void> setTheme(ThemeModeOption option) async {

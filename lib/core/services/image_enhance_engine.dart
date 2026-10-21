@@ -13,14 +13,20 @@ class ImageEnhanceEngine {
     required String operation,
     String? strength,
     int? upscaleFactor,
-    int maxSide = 4096,
+    int maxSide = 2048,
   }) {
     var image = source;
-    if (image.width > maxSide || image.height > maxSide) {
+    // Upscale starts from a smaller working image so the result can grow
+    // without holding several full-resolution copies in memory.
+    final scale = (upscaleFactor ?? 2).clamp(2, 4);
+    final limit = operation == 'upscale'
+        ? (maxSide / scale).floor().clamp(512, 1536)
+        : maxSide;
+    if (image.width > limit || image.height > limit) {
       image = img.copyResize(
         image,
-        width: image.width >= image.height ? maxSide : null,
-        height: image.height > image.width ? maxSide : null,
+        width: image.width >= image.height ? limit : null,
+        height: image.height > image.width ? limit : null,
         interpolation: img.Interpolation.average,
       );
     }
@@ -758,25 +764,32 @@ class ImageEnhanceEngine {
 
 /// Isolate entry — must be top-level for `compute`.
 Map<String, dynamic> runEnhanceJob(Map<String, dynamic> job) {
-  final bytes = job['bytes'] as Uint8List;
-  final operation = job['operation'] as String;
-  final strength = job['strength'] as String?;
-  final factor = job['factor'] as int?;
-  final maxSide = job['maxSide'] as int? ?? 4096;
+  try {
+    final bytes = job['bytes'] as Uint8List;
+    final operation = job['operation'] as String;
+    final strength = job['strength'] as String?;
+    final factor = job['factor'] as int?;
+    final configured = job['maxSide'] as int? ?? 4096;
+    final maxSide = operation == 'upscale'
+        ? math.min(configured, 3072)
+        : math.min(configured, 2048);
 
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) {
-    return {'ok': false, 'error': 'decode'};
+    final raw = img.decodeImage(bytes);
+    if (raw == null) {
+      return {'ok': false, 'error': 'decode'};
+    }
+
+    final result = ImageEnhanceEngine.process(
+      source: img.bakeOrientation(raw),
+      operation: operation,
+      strength: strength,
+      upscaleFactor: factor,
+      maxSide: maxSide,
+    );
+
+    final encoded = Uint8List.fromList(img.encodeJpg(result, quality: 92));
+    return {'ok': true, 'bytes': encoded};
+  } catch (e) {
+    return {'ok': false, 'error': e.toString()};
   }
-
-  final result = ImageEnhanceEngine.process(
-    source: decoded,
-    operation: operation,
-    strength: strength,
-    upscaleFactor: factor,
-    maxSide: maxSide,
-  );
-
-  final encoded = Uint8List.fromList(img.encodeJpg(result, quality: 95));
-  return {'ok': true, 'bytes': encoded};
 }

@@ -28,6 +28,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Release uses the live AdMob app. Debug overrides this below.
+        manifestPlaceholders["admobAppId"] =
+            "ca-app-pub-8476267163759140~5404661419"
     }
 
     signingConfigs {
@@ -42,6 +45,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["admobAppId"] =
+                "ca-app-pub-3940256099942544~3347511713"
+        }
         release {
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
@@ -58,4 +65,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Play Console requires Billing Library 8 or newer.
+    // 8.3.0 is the latest 8.x; in_app_purchase_android requests 8.0.0.
+    implementation("com.android.billingclient:billing:8.3.0")
 }

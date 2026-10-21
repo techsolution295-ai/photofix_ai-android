@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/models.dart';
 import '../../presentation/screens/history/history_screen.dart';
+import '../../presentation/screens/premium/premium_screen.dart';
 import '../../presentation/screens/home/main_shell.dart';
 import '../../presentation/screens/legal/legal_screens.dart';
 import '../../presentation/screens/result/result_screen.dart';
@@ -64,6 +65,10 @@ class AppRouter {
         return _fade(const Scaffold(
           body: Center(child: Text('Missing result data')),
         ));
+      case RouteNames.premium:
+        return _fade(
+          PremiumScreen(openedFromSplash: args == true),
+        );
       case RouteNames.history:
         return _slide(const HistoryScreen());
       case RouteNames.settings:

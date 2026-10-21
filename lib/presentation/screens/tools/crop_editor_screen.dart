@@ -14,6 +14,59 @@ import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/ai_models.dart';
 import '../../../domain/models/models.dart';
 import '../../providers/history_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../widgets/pro_chip.dart';
+
+class _PreviewDecode {
+  const _PreviewDecode(this.image, this.originalSize);
+  final ui.Image image;
+  final Size originalSize;
+}
+
+/// Decodes a display-sized preview and keeps the oriented original size
+/// so crop coordinates still match the saved photo.
+Future<_PreviewDecode> _decodePreview(Uint8List bytes) async {
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  try {
+    final descriptor = await ui.ImageDescriptor.encoded(buffer);
+    try {
+      const maxPreview = 1600;
+      final rawW = descriptor.width;
+      final rawH = descriptor.height;
+      if (rawW < 1 || rawH < 1) {
+        throw StateError('empty image');
+      }
+      final longSide = math.max(rawW, rawH);
+      final codec = await descriptor.instantiateCodec(
+        targetWidth: longSide > maxPreview && rawW >= rawH ? maxPreview : null,
+        targetHeight: longSide > maxPreview && rawH > rawW ? maxPreview : null,
+      );
+      try {
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
+        final rawAspect = rawW / rawH;
+        final frameAspect = image.width / image.height;
+        final swapped = rawW != rawH &&
+            (rawAspect - frameAspect).abs() > 0.08 &&
+            ((rawH / rawW) - frameAspect).abs() < 0.08;
+        return _PreviewDecode(
+          image,
+          Size(
+            (swapped ? rawH : rawW).toDouble(),
+            (swapped ? rawW : rawH).toDouble(),
+          ),
+        );
+      } finally {
+        codec.dispose();
+      }
+    } finally {
+      descriptor.dispose();
+    }
+  } finally {
+    buffer.dispose();
+  }
+}
 
 /// Professional interactive crop editor — drag, resize, aspect lock.
 class CropScreen extends StatefulWidget {
@@ -64,19 +117,16 @@ class _CropScreenState extends State<CropScreen> {
     });
     try {
       final bytes = await File(path).readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final size = Size(image.width.toDouble(), image.height.toDouble());
+      final preview = await _decodePreview(bytes);
       if (!mounted) {
-        image.dispose();
+        preview.image.dispose();
         return;
       }
       setState(() {
         _bytes = bytes;
-        _decoded = image;
-        _imageSize = size;
-        _crop = _defaultCrop(size);
+        _decoded = preview.image;
+        _imageSize = preview.originalSize;
+        _crop = _defaultCrop(preview.originalSize);
         _loading = false;
       });
     } catch (_) {
@@ -132,7 +182,19 @@ class _CropScreenState extends State<CropScreen> {
   }
 
   Future<void> _applyCrop() async {
-    if (_path == null || _bytes == null || _crop == null || _imageSize == null) {
+    if (_busy ||
+        _path == null ||
+        _bytes == null ||
+        _crop == null ||
+        _imageSize == null) {
+      return;
+    }
+    final iw = _imageSize!.width.round();
+    final ih = _imageSize!.height.round();
+    if (iw < 2 || ih < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This photo is too small to crop.')),
+      );
       return;
     }
     setState(() => _busy = true);
@@ -258,9 +320,15 @@ class _CropScreenState extends State<CropScreen> {
                         ),
                       ),
                     ),
+                  if (!context.watch<SettingsProvider>().isPremium)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8, left: 8),
+                      child: ProChip(),
+                    ),
                 ],
               ),
             ),
+            const BannerAdWidget(),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -296,7 +364,7 @@ class _CropScreenState extends State<CropScreen> {
                                   imageSize: _imageSize!,
                                   crop: _crop!,
                                   aspect: _aspect,
-                                  onChanged: (r) => setState(() => _crop = r),
+                                  onChanged: (r) => _crop = r,
                                 ),
                               ),
                               if (_busy)
@@ -666,6 +734,21 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
   _Hit _hit = _Hit.none;
   Rect? _startCrop;
   Offset? _startLocal;
+  late Rect _crop;
+
+  @override
+  void initState() {
+    super.initState();
+    _crop = widget.crop;
+  }
+
+  @override
+  void didUpdateWidget(covariant _InteractiveCropView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_hit == _Hit.none && widget.crop != oldWidget.crop) {
+      _crop = widget.crop;
+    }
+  }
 
   /// Fitted image rect inside the view.
   Rect _fitRect(Size view) {
@@ -677,26 +760,37 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
     return Rect.fromLTWH((view.width - w) / 2, (view.height - h) / 2, w, h);
   }
 
-  Offset _toImage(Offset local, Rect fit) {
-    final x = (local.dx - fit.left) / fit.width * widget.imageSize.width;
-    final y = (local.dy - fit.top) / fit.height * widget.imageSize.height;
-    return Offset(x, y);
+  Rect _cropToView(Rect crop, Rect fit) {
+    return Rect.fromLTRB(
+      fit.left + crop.left / widget.imageSize.width * fit.width,
+      fit.top + crop.top / widget.imageSize.height * fit.height,
+      fit.left + crop.right / widget.imageSize.width * fit.width,
+      fit.top + crop.bottom / widget.imageSize.height * fit.height,
+    );
   }
 
   Rect _clamp(Rect r) {
     final max = widget.imageSize;
-    var left = r.left.clamp(0.0, max.width - 1);
-    var top = r.top.clamp(0.0, max.height - 1);
-    var right = r.right.clamp(left + 1, max.width);
-    var bottom = r.bottom.clamp(top + 1, max.height);
-    const minSize = 40.0;
-    if (right - left < minSize) {
-      right = (left + minSize).clamp(0.0, max.width);
-      left = (right - minSize).clamp(0.0, max.width);
+    if (max.width < 2 || max.height < 2) {
+      return Rect.fromLTWH(0, 0, math.max(max.width, 1), math.max(max.height, 1));
     }
-    if (bottom - top < minSize) {
-      bottom = (top + minSize).clamp(0.0, max.height);
-      top = (bottom - minSize).clamp(0.0, max.height);
+    var left = math.min(r.left, r.right);
+    var right = math.max(r.left, r.right);
+    var top = math.min(r.top, r.bottom);
+    var bottom = math.max(r.top, r.bottom);
+    left = left.clamp(0.0, max.width - 1);
+    top = top.clamp(0.0, max.height - 1);
+    right = right.clamp(left + 1, max.width);
+    bottom = bottom.clamp(top + 1, max.height);
+    final minW = math.min(40.0, max.width);
+    final minH = math.min(40.0, max.height);
+    if (right - left < minW) {
+      right = (left + minW).clamp(0.0, max.width);
+      left = (right - minW).clamp(0.0, max.width);
+    }
+    if (bottom - top < minH) {
+      bottom = (top + minH).clamp(0.0, max.height);
+      top = (bottom - minH).clamp(0.0, max.height);
     }
     return Rect.fromLTRB(left, top, right, bottom);
   }
@@ -733,50 +827,54 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
     return _clamp(Rect.fromLTRB(left, top, right, bottom));
   }
 
-  _Hit _detectHit(Offset imagePt, Rect crop) {
+  _Hit _detectHit(Offset local, Rect cropView) {
     const handle = 28.0;
-    bool near(Offset a, Offset b) => (a - b).distance <= handle;
+    bool near(Offset corner) => (local - corner).distance <= handle;
 
-    if (near(imagePt, crop.topLeft)) return _Hit.tl;
-    if (near(imagePt, crop.topRight)) return _Hit.tr;
-    if (near(imagePt, crop.bottomLeft)) return _Hit.bl;
-    if (near(imagePt, crop.bottomRight)) return _Hit.br;
+    if (near(cropView.topLeft)) return _Hit.tl;
+    if (near(cropView.topRight)) return _Hit.tr;
+    if (near(cropView.bottomLeft)) return _Hit.bl;
+    if (near(cropView.bottomRight)) return _Hit.br;
 
-    if ((imagePt.dx - crop.left).abs() <= handle &&
-        imagePt.dy >= crop.top &&
-        imagePt.dy <= crop.bottom) {
+    if ((local.dx - cropView.left).abs() <= handle &&
+        local.dy >= cropView.top &&
+        local.dy <= cropView.bottom) {
       return _Hit.left;
     }
-    if ((imagePt.dx - crop.right).abs() <= handle &&
-        imagePt.dy >= crop.top &&
-        imagePt.dy <= crop.bottom) {
+    if ((local.dx - cropView.right).abs() <= handle &&
+        local.dy >= cropView.top &&
+        local.dy <= cropView.bottom) {
       return _Hit.right;
     }
-    if ((imagePt.dy - crop.top).abs() <= handle &&
-        imagePt.dx >= crop.left &&
-        imagePt.dx <= crop.right) {
+    if ((local.dy - cropView.top).abs() <= handle &&
+        local.dx >= cropView.left &&
+        local.dx <= cropView.right) {
       return _Hit.top;
     }
-    if ((imagePt.dy - crop.bottom).abs() <= handle &&
-        imagePt.dx >= crop.left &&
-        imagePt.dx <= crop.right) {
+    if ((local.dy - cropView.bottom).abs() <= handle &&
+        local.dx >= cropView.left &&
+        local.dx <= cropView.right) {
       return _Hit.bottom;
     }
-    if (crop.inflate(4).contains(imagePt)) return _Hit.move;
+    if (cropView.contains(local)) return _Hit.move;
     return _Hit.none;
   }
 
   void _onScaleStart(ScaleStartDetails d, Rect fit) {
-    final imgPt = _toImage(d.localFocalPoint, fit);
-    _hit = _detectHit(imgPt, widget.crop);
-    _startCrop = widget.crop;
-    _startLocal = imgPt;
+    final cropView = _cropToView(_crop, fit);
+    _hit = _detectHit(d.localFocalPoint, cropView);
+    _startCrop = _crop;
+    _startLocal = d.localFocalPoint;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d, Rect fit) {
     if (_hit == _Hit.none || _startCrop == null || _startLocal == null) return;
-    final imgPt = _toImage(d.localFocalPoint, fit);
-    final delta = imgPt - _startLocal!;
+    if (fit.width < 1 || fit.height < 1) return;
+    final deltaLocal = d.localFocalPoint - _startLocal!;
+    final delta = Offset(
+      deltaLocal.dx * widget.imageSize.width / fit.width,
+      deltaLocal.dy * widget.imageSize.height / fit.height,
+    );
     var r = _startCrop!;
 
     switch (_hit) {
@@ -835,6 +933,7 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
     if (widget.aspect != null && _hit != _Hit.move) {
       r = _applyAspect(r, _hit);
     }
+    setState(() => _crop = r);
     widget.onChanged(r);
   }
 
@@ -845,6 +944,7 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
         final view = Size(c.maxWidth, c.maxHeight);
         final fit = _fitRect(view);
         return GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onScaleStart: (d) => _onScaleStart(d, fit),
           onScaleUpdate: (d) => _onScaleUpdate(d, fit),
           onScaleEnd: (_) {
@@ -852,14 +952,24 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
             _startCrop = null;
             _startLocal = null;
           },
-          child: CustomPaint(
-            size: view,
-            painter: _CropPainter(
-              image: widget.image,
-              fit: fit,
-              imageSize: widget.imageSize,
-              crop: widget.crop,
-            ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              RepaintBoundary(
+                child: CustomPaint(
+                  size: view,
+                  painter: _PhotoPainter(image: widget.image, fit: fit),
+                ),
+              ),
+              CustomPaint(
+                size: view,
+                painter: _CropPainter(
+                  fit: fit,
+                  imageSize: widget.imageSize,
+                  crop: _crop,
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -867,30 +977,41 @@ class _InteractiveCropViewState extends State<_InteractiveCropView> {
   }
 }
 
+class _PhotoPainter extends CustomPainter {
+  _PhotoPainter({required this.image, required this.fit});
+
+  final ui.Image image;
+  final Rect fit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintImage(
+      canvas: canvas,
+      rect: fit,
+      image: image,
+      fit: BoxFit.fill,
+      filterQuality: FilterQuality.medium,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PhotoPainter old) =>
+      old.image != image || old.fit != fit;
+}
+
 class _CropPainter extends CustomPainter {
   _CropPainter({
-    required this.image,
     required this.fit,
     required this.imageSize,
     required this.crop,
   });
 
-  final ui.Image image;
   final Rect fit;
   final Size imageSize;
   final Rect crop;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Image
-    paintImage(
-      canvas: canvas,
-      rect: fit,
-      image: image,
-      fit: BoxFit.fill,
-      filterQuality: FilterQuality.high,
-    );
-
     final cropView = Rect.fromLTRB(
       fit.left + crop.left / imageSize.width * fit.width,
       fit.top + crop.top / imageSize.height * fit.height,
@@ -982,5 +1103,5 @@ class _CropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CropPainter old) =>
-      old.crop != crop || old.fit != fit || old.image != image;
+      old.crop != crop || old.fit != fit;
 }

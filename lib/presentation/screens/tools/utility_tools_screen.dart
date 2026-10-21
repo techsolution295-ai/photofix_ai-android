@@ -1,11 +1,9 @@
 import 'dart:io';
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,11 +12,15 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/route_names.dart';
 import '../../../core/services/image_storage_service.dart';
+import '../../../core/services/utility_image_jobs.dart';
 import '../../../core/services/photo_picker_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/models/ai_models.dart';
 import '../../../domain/models/models.dart';
 import '../../providers/history_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../widgets/banner_ad_widget.dart';
+import '../../widgets/pro_chip.dart';
 
 /// Shared shell for local utility editors.
 class _UtilityShell extends StatelessWidget {
@@ -83,9 +85,15 @@ class _UtilityShell extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (!context.watch<SettingsProvider>().isPremium)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: ProChip(),
+                    ),
                 ],
               ),
             ),
+            const BannerAdWidget(),
             Expanded(child: child),
           ],
         ),
@@ -280,20 +288,18 @@ class _RotateScreenState extends State<RotateScreen> {
   }
 
   Future<void> _run() async {
-    if (_path == null) return;
+    if (_busy || _path == null) return;
     setState(() => _busy = true);
     try {
       final bytes = await File(_path!).readAsBytes();
-      var decoded = img.decodeImage(bytes);
-      if (decoded == null) throw Exception('decode');
-      for (var i = 0; i < _turns % 4; i++) {
-        decoded = img.copyRotate(decoded!, angle: 90);
-      }
-      if (_flipH) decoded = img.flipHorizontal(decoded!);
-      final out = await _writeTemp(
-        Uint8List.fromList(img.encodeJpg(decoded!, quality: 95)),
-        'jpg',
-      );
+      final result = await compute(runUtilityJob, {
+        'op': 'rotate',
+        'bytes': bytes,
+        'turns': _turns % 4,
+        'flipH': _flipH,
+      });
+      if (result['ok'] != true) throw Exception('rotate');
+      final out = await _writeTemp(result['bytes'] as Uint8List, 'jpg');
       if (!mounted) return;
       await _openResult(
         context,
@@ -321,8 +327,8 @@ class _RotateScreenState extends State<RotateScreen> {
         child: Column(
           children: [
             Expanded(
-              child: Transform.rotate(
-                angle: (_turns % 4) * (math.pi / 2),
+              child: RotatedBox(
+                quarterTurns: _turns % 4,
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.diagonal3Values(_flipH ? -1 : 1, 1, 1),
@@ -414,15 +420,17 @@ class _CompressScreenState extends State<CompressScreen> {
   }
 
   Future<void> _run() async {
-    if (_path == null) return;
+    if (_busy || _path == null) return;
     setState(() => _busy = true);
     try {
       final bytes = await File(_path!).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) throw Exception('decode');
-      final encoded =
-          Uint8List.fromList(img.encodeJpg(decoded, quality: _quality.round()));
-      final out = await _writeTemp(encoded, 'jpg');
+      final result = await compute(runUtilityJob, {
+        'op': 'compress',
+        'bytes': bytes,
+        'quality': _quality.round(),
+      });
+      if (result['ok'] != true) throw Exception('compress');
+      final out = await _writeTemp(result['bytes'] as Uint8List, 'jpg');
       if (!mounted) return;
       await _openResult(
         context,
@@ -549,27 +557,20 @@ class _FormatConvertScreenState extends State<FormatConvertScreen> {
   }
 
   Future<void> _run() async {
-    if (_path == null) return;
+    if (_busy || _path == null) return;
     setState(() => _busy = true);
     try {
       final bytes = await File(_path!).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) throw Exception('decode');
-      late Uint8List encoded;
-      late String ext;
-      switch (_format) {
-        case 'png':
-          encoded = Uint8List.fromList(img.encodePng(decoded));
-          ext = 'png';
-        case 'webp':
-          // Device-safe high quality JPEG stand-in for WEBP.
-          encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: 92));
-          ext = 'jpg';
-        default:
-          encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
-          ext = 'jpg';
-      }
-      final out = await _writeTemp(encoded, ext);
+      final result = await compute(runUtilityJob, {
+        'op': 'format',
+        'bytes': bytes,
+        'format': _format,
+      });
+      if (result['ok'] != true) throw Exception('format');
+      final out = await _writeTemp(
+        result['bytes'] as Uint8List,
+        result['ext'] as String? ?? 'jpg',
+      );
       if (!mounted) return;
       await _openResult(
         context,
@@ -685,13 +686,13 @@ class _StickersTextScreenState extends State<StickersTextScreen> {
   }
 
   Future<void> _run() async {
-    if (_path == null) return;
+    if (_busy || _path == null) return;
     setState(() => _busy = true);
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      final boundary =
-          _repaint.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
+      await WidgetsBinding.instance.endOfFrame;
+      final object = _repaint.currentContext?.findRenderObject();
+      if (object is! RenderRepaintBoundary) throw Exception('capture');
+      final image = await object.toImage(pixelRatio: 2);
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw Exception('capture');
       final out = await _writeTemp(data.buffer.asUint8List(), 'png');
@@ -743,7 +744,15 @@ class _StickersTextScreenState extends State<StickersTextScreen> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.file(File(_path!), fit: BoxFit.contain),
+                            Image.file(
+                              File(_path!),
+                              fit: BoxFit.contain,
+                              cacheWidth: 1280,
+                              filterQuality: FilterQuality.medium,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
                             Align(
                               alignment: const Alignment(0.72, -0.58),
                               child: Text(
@@ -903,6 +912,7 @@ class _CollageScreenState extends State<CollageScreen> {
   void _remove(int i) => setState(() => _paths.removeAt(i));
 
   Future<void> _run() async {
+    if (_busy) return;
     if (_paths.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least 2 photos.')),
@@ -911,41 +921,16 @@ class _CollageScreenState extends State<CollageScreen> {
     }
     setState(() => _busy = true);
     try {
-      final decoded = <img.Image>[];
+      final images = <Uint8List>[];
       for (final path in _paths.take(4)) {
-        final bytes = await File(path).readAsBytes();
-        final d = img.decodeImage(bytes);
-        if (d != null) decoded.add(img.bakeOrientation(d));
+        images.add(await File(path).readAsBytes());
       }
-      if (decoded.length < 2) throw Exception('decode');
-
-      const cell = 640;
-      final count = decoded.length;
-      final cols = count == 3 ? 2 : (count <= 2 ? count : 2);
-      final rows = count <= 2 ? 1 : 2;
-      final canvas = img.Image(width: cell * cols, height: cell * rows);
-      img.fill(canvas, color: img.ColorRgb8(247, 248, 252));
-
-      for (var i = 0; i < count; i++) {
-        final r = i ~/ cols;
-        final c = i % cols;
-        // For 3 photos: last one spans remaining? keep simple grid; 3rd in bottom-left
-        final w = cell;
-        final h = cell;
-        final resized = img.copyResize(
-          decoded[i],
-          width: w,
-          height: h,
-          interpolation: img.Interpolation.average,
-          maintainAspect: false,
-        );
-        img.compositeImage(canvas, resized, dstX: c * cell, dstY: r * cell);
-      }
-
-      final out = await _writeTemp(
-        Uint8List.fromList(img.encodeJpg(canvas, quality: 92)),
-        'jpg',
-      );
+      final result = await compute(runUtilityJob, {
+        'op': 'collage',
+        'images': images,
+      });
+      if (result['ok'] != true) throw Exception('collage');
+      final out = await _writeTemp(result['bytes'] as Uint8List, 'jpg');
       if (!mounted) return;
       await _openResult(
         context,
@@ -1002,6 +987,10 @@ class _CollageScreenState extends State<CollageScreen> {
                           child: Image.file(
                             File(_paths[i]),
                             fit: BoxFit.cover,
+                            cacheWidth: 640,
+                            filterQuality: FilterQuality.medium,
+                            errorBuilder: (_, __, ___) =>
+                                const ColoredBox(color: Color(0xFFE8EAF2)),
                           ),
                         ),
                         Positioned(
@@ -1156,7 +1145,15 @@ class _Preview extends StatelessWidget {
                     ),
                   ],
                 )
-              : Image.file(File(path!), fit: BoxFit.contain),
+              : Image.file(
+                  File(path!),
+                  fit: BoxFit.contain,
+                  cacheWidth: 1280,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(Icons.broken_image_outlined),
+                  ),
+                ),
         ),
       ),
     );

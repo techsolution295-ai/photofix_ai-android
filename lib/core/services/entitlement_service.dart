@@ -29,13 +29,11 @@ class EntitlementService {
   }
 
   EntitlementType mapProductId(String productId) {
-    if (productId == AppConfig.productLifetime) {
-      return EntitlementType.lifetime;
-    }
     if (productId == AppConfig.productYearly) {
       return EntitlementType.proYearly;
     }
-    if (productId == AppConfig.productMonthly) {
+    if (productId == AppConfig.productMonthly ||
+        productId == AppConfig.productWeekly) {
       return EntitlementType.proMonthly;
     }
     return EntitlementType.free;
