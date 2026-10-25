@@ -50,6 +50,10 @@ android {
                 "ca-app-pub-3940256099942544~3347511713"
         }
         release {
+            // WorkManager/Room crash on startup when R8 strips generated
+            // WorkDatabase_Impl. Keep release stable for AdMob + billing.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

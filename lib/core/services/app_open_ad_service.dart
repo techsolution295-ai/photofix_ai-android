@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../config/app_config.dart';
 import 'ad_service.dart';
 
 /// Splash app-open ad. Pro members never see it.
+/// Failures never block splash navigation.
 class AppOpenAdManager {
   AppOpenAdManager._();
 
@@ -16,6 +18,7 @@ class AppOpenAdManager {
   bool _isShowing = false;
   bool _isLoading = false;
   Completer<bool>? _loadCompleter;
+  DateTime? _nextAllowedLoadAt;
 
   bool get _isProUser => AdService.instance.isPro;
 
@@ -30,19 +33,24 @@ class AppOpenAdManager {
   }
 
   Future<bool> loadAd() {
-    if (_isProUser) {
-      _appOpenAd?.dispose();
-      _appOpenAd = null;
+    if (!AppConfig.enableAppOpenAds || _isProUser) {
+      discard();
       return Future.value(false);
     }
     if (_appOpenAd != null) return Future.value(true);
     if (_isLoading) return _loadCompleter?.future ?? Future.value(false);
     if (_loadCompleter != null) return _loadCompleter!.future;
 
+    final nextAllowed = _nextAllowedLoadAt;
+    if (nextAllowed != null && DateTime.now().isBefore(nextAllowed)) {
+      return Future.value(false);
+    }
+
     _loadCompleter = Completer<bool>();
     _isLoading = true;
 
     try {
+      debugPrint('AppOpenAd: AdRequest');
       AppOpenAd.load(
         adUnitId: AdService.instance.appOpenAdUnitId,
         request: const AdRequest(),
@@ -50,66 +58,103 @@ class AppOpenAdManager {
           onAdLoaded: (ad) {
             _appOpenAd = ad;
             _isLoading = false;
-            _loadCompleter?.complete(true);
-            _loadCompleter = null;
+            _nextAllowedLoadAt = null;
+            debugPrint('AppOpenAd: loaded');
+            _completeLoad(true);
           },
           onAdFailedToLoad: (error) {
-            if (kDebugMode) debugPrint('App open ad failed to load: $error');
+            debugPrint('App open failed: $error');
             _isLoading = false;
-            _loadCompleter?.complete(false);
-            _loadCompleter = null;
+            _nextAllowedLoadAt =
+                DateTime.now().add(const Duration(seconds: 45));
+            _completeLoad(false);
           },
         ),
       );
-    } on PlatformException catch (error) {
-      if (kDebugMode) debugPrint('App open ad load error: $error');
+    } catch (error) {
+      debugPrint('App open ad load error: $error');
       _isLoading = false;
-      _loadCompleter?.complete(false);
-      _loadCompleter = null;
+      _nextAllowedLoadAt = DateTime.now().add(const Duration(seconds: 45));
+      _completeLoad(false);
       return Future.value(false);
     }
 
     return _loadCompleter!.future;
   }
 
+  void _completeLoad(bool value) {
+    final completer = _loadCompleter;
+    _loadCompleter = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(value);
+    }
+  }
+
   Future<bool> showAdIfAvailable({Duration? loadTimeout}) async {
-    if (_isProUser || _isShowing) return false;
+    if (!AppConfig.enableAppOpenAds || _isProUser || _isShowing) {
+      return false;
+    }
 
-    final loadFuture = loadAd();
-    final loaded = loadTimeout == null
-        ? await loadFuture
-        : await loadFuture.timeout(loadTimeout, onTimeout: () => false);
-    if (!loaded || _appOpenAd == null) return false;
+    try {
+      final loadFuture = loadAd();
+      final loaded = loadTimeout == null
+          ? await loadFuture
+          : await loadFuture.timeout(loadTimeout, onTimeout: () => false);
+      if (!loaded || _appOpenAd == null) return false;
 
-    final completer = Completer<void>();
-    var didShow = false;
-    _isShowing = true;
+      final completer = Completer<void>();
+      var didShow = false;
+      _isShowing = true;
 
-    _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        _disposeAd(ad);
+      _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) {
+          _disposeAd(ad);
+          _isShowing = false;
+          if (!completer.isCompleted) completer.complete();
+        },
+        onAdFailedToShowFullScreenContent: (ad, error) {
+          if (kDebugMode) {
+            debugPrint('App open ad failed to show: $error');
+          }
+          _disposeAd(ad);
+          _isShowing = false;
+          if (!completer.isCompleted) completer.complete();
+        },
+        onAdShowedFullScreenContent: (ad) {
+          didShow = true;
+        },
+      );
+
+      try {
+        await _appOpenAd!.show();
+      } on PlatformException catch (error) {
+        if (kDebugMode) debugPrint('App open show error: $error');
+        _disposeAd(_appOpenAd!);
         _isShowing = false;
-        if (!completer.isCompleted) completer.complete();
-        loadAd();
-      },
-      onAdFailedToShowFullScreenContent: (ad, error) {
-        _disposeAd(ad);
-        _isShowing = false;
-        if (!completer.isCompleted) completer.complete();
-        loadAd();
-      },
-      onAdShowedFullScreenContent: (ad) {
-        didShow = true;
-      },
-    );
+        return false;
+      }
 
-    _appOpenAd!.show();
-    await completer.future;
-    return didShow;
+      await completer.future.timeout(
+        const Duration(seconds: 12),
+        onTimeout: () {
+          final ad = _appOpenAd;
+          if (ad != null) _disposeAd(ad);
+          _isShowing = false;
+        },
+      );
+      return didShow;
+    } catch (error) {
+      if (kDebugMode) debugPrint('App open showAdIfAvailable error: $error');
+      _isShowing = false;
+      discard();
+      return false;
+    }
   }
 
   void _disposeAd(AppOpenAd ad) {
     ad.dispose();
-    _appOpenAd = null;
+    if (identical(_appOpenAd, ad)) {
+      _appOpenAd = null;
+    }
   }
 }

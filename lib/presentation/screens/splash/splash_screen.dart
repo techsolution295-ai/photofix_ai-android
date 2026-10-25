@@ -52,11 +52,15 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     final elapsed = DateTime.now().difference(started);
-    final budget = const Duration(seconds: 8) - elapsed;
-    final timeout = budget > const Duration(seconds: 4)
-        ? const Duration(seconds: 4)
-        : (budget > Duration.zero ? budget : const Duration(milliseconds: 800));
-    await AppOpenAdManager.instance.showAdIfAvailable(loadTimeout: timeout);
+    final budget = const Duration(seconds: 6) - elapsed;
+    final timeout = budget > const Duration(seconds: 2)
+        ? const Duration(seconds: 2)
+        : (budget > Duration.zero ? budget : const Duration(milliseconds: 400));
+    try {
+      await AppOpenAdManager.instance
+          .showAdIfAvailable(loadTimeout: timeout)
+          .timeout(timeout + const Duration(seconds: 1), onTimeout: () => false);
+    } catch (_) {}
     if (!mounted) return;
     if (context.read<SettingsProvider>().isPremium) {
       Navigator.of(context).pushReplacementNamed(RouteNames.main);

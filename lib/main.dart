@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'core/config/app_config.dart';
 import 'core/services/ad_service.dart';
+import 'core/services/app_open_ad_service.dart';
 import 'core/services/ai_service.dart';
 import 'core/services/ai_service_factory.dart';
 import 'core/services/analytics_service.dart';
@@ -63,6 +64,9 @@ Future<void> main() async {
         .timeout(const Duration(seconds: 8));
   } catch (_) {}
   AdService.instance.initialize();
+  if (!settingsProvider.isPremium) {
+    unawaited(AppOpenAdManager.instance.loadAd());
+  }
   unawaited(billing.start());
 
   final aiConfigProvider = AiConfigProvider(openAiKeys);

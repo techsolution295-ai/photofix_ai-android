@@ -73,18 +73,22 @@ class AppConfig {
   static const String basePlanMonthly = 'monthly-base';
   static const String basePlanYearly = 'yearly-base';
 
-  // --- AdMob (defaults = Google test IDs) ---
+  // --- AdMob live units (must match android/app/build.gradle.kts app id) ---
   static const String admobAppId = String.fromEnvironment(
     'ADMOB_APP_ID',
-    defaultValue: 'ca-app-pub-3940256099942544~3347511713',
+    defaultValue: 'ca-app-pub-8476267163759140~5404661419',
   );
   static const String bannerAdUnitId = String.fromEnvironment(
     'ADMOB_BANNER_ID',
-    defaultValue: 'ca-app-pub-3940256099942544/6300978111',
+    defaultValue: 'ca-app-pub-8476267163759140/2887318448',
   );
   static const String interstitialAdUnitId = String.fromEnvironment(
     'ADMOB_INTERSTITIAL_ID',
-    defaultValue: 'ca-app-pub-3940256099942544/1033173712',
+    defaultValue: 'ca-app-pub-8476267163759140/3534930569',
+  );
+  static const String appOpenAdUnitId = String.fromEnvironment(
+    'ADMOB_APP_OPEN_ID',
+    defaultValue: 'ca-app-pub-8476267163759140/8550708668',
   );
   static const String rewardedAdUnitId = String.fromEnvironment(
     'ADMOB_REWARDED_ID',
@@ -92,7 +96,7 @@ class AppConfig {
   );
   static const bool enableAppOpenAds = bool.fromEnvironment(
     'ENABLE_APP_OPEN_ADS',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   static const int freeDailyLimit = 3;

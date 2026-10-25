@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/services/ad_service.dart';
 import '../providers/settings_provider.dart';
 
-/// Anchored banner. Hidden for Pro members.
+/// Anchored adaptive banner. Hidden for Pro members.
 class BannerAdWidget extends StatefulWidget {
   const BannerAdWidget({super.key});
 
@@ -16,10 +17,10 @@ class BannerAdWidget extends StatefulWidget {
 }
 
 class _BannerAdWidgetState extends State<BannerAdWidget> {
-  static const double _height = 56;
-  static const _retryInterval = Duration(seconds: 30);
+  static const _retryInterval = Duration(seconds: 45);
 
   BannerAd? _bannerAd;
+  double _bannerHeight = 56;
   bool _isLoading = false;
   Timer? _retryTimer;
 
@@ -43,13 +44,28 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     super.dispose();
   }
 
-  void _loadBanner() {
+  Future<void> _loadBanner() async {
     if (_isLoading || _bannerAd != null) return;
     if (context.read<SettingsProvider>().isPremium) return;
     _isLoading = true;
+
+    final width = MediaQuery.sizeOf(context).width.truncate();
+    AdSize size = AdSize.banner;
+    try {
+      final adaptive = await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+        width,
+      );
+      if (adaptive != null) size = adaptive;
+    } catch (_) {}
+
+    if (!mounted) {
+      _isLoading = false;
+      return;
+    }
+
     final ad = BannerAd(
       adUnitId: AdService.instance.bannerAdUnitId,
-      size: AdSize.banner,
+      size: size,
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (loaded) {
@@ -59,11 +75,13 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
           }
           setState(() {
             _bannerAd = loaded as BannerAd;
+            _bannerHeight = size.height.toDouble();
             _isLoading = false;
           });
         },
         onAdFailedToLoad: (failed, error) {
           failed.dispose();
+          debugPrint('Banner failed: $error');
           if (!mounted) return;
           setState(() {
             _bannerAd = null;
@@ -87,22 +105,19 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
       return const SizedBox.shrink();
     }
 
+    if (_bannerAd == null) return const SizedBox.shrink();
+
     return Material(
       color: Colors.white,
       child: Container(
-        height: _height,
+        width: double.infinity,
+        height: _bannerHeight,
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(bottom: BorderSide(color: Color(0xFFE8EAF2))),
         ),
         alignment: Alignment.center,
-        child: _bannerAd == null
-            ? const SizedBox.shrink()
-            : SizedBox(
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
+        child: AdWidget(ad: _bannerAd!),
       ),
     );
   }
